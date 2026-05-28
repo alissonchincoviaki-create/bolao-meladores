@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+@layer base {
+  body {
+    @apply bg-dark-50 text-dark-900 font-sans;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply w-full py-3.5 bg-gradient-to-r from-primary-600 to-primary-700 text-white font-bold rounded-xl
+    shadow-lg shadow-primary-600/30 hover:from-primary-700 hover:to-primary-800 transition-all duration-200;
+  }
+  .btn-secondary {
+    @apply px-4 py-2.5 border border-dark-300 rounded-lg text-dark-700 font-medium hover:bg-dark-100 transition-all;
+  }
+  .btn-success {
+    @apply px-4 py-2 bg-success text-white font-semibold rounded-lg hover:bg-green-700 transition-all;
+  }
+  .btn-danger {
+    @apply px-3 py-1.5 border border-red-200 text-danger rounded-lg text-xs hover:bg-red-50 transition-all;
+  }
+  .input-field {
+    @apply w-full px-4 py-3 border border-dark-300 rounded-lg bg-dark-50 text-dark-900 font-sans
+    focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent transition-all;
+  }
+  .card {
+    @apply bg-white rounded-2xl p-5 border border-dark-200 shadow-sm;
+  }
+  .section-title {
+    @apply font-display text-lg font-extrabold text-dark-900 mb-3;
+  }
+  .nav-btn {
+    @apply flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all whitespace-nowrap;
+  }
+  .nav-btn-active {
+    @apply bg-primary-600 text-white font-bold;
+  }
+  .nav-btn-inactive {
+    @apply text-dark-600 hover:bg-dark-100;
+  }
+  .phase-btn {
+    @apply px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap;
+  }
+  .phase-btn-active {
+    @apply bg-primary-600 text-white font-bold;
+  }
+  .phase-btn-inactive {
+    @apply border border-dark-200 text-dark-600 bg-white hover:border-primary-400;
+  }
+  .stepper-btn {
+    @apply w-7 h-5 border border-dark-300 bg-white flex items-center justify-center text-sm font-bold text-dark-600 cursor-pointer hover:bg-dark-100 transition-all;
+  }
+  .stepper-value {
+    @apply w-7 h-8 border-x-2 border-dark-300 bg-white flex items-center justify-center font-display text-lg font-extrabold text-dark-900;
+  }
+  .badge-brasil {
+    @apply bg-brasil text-white text-[9px] font-bold px-1.5 py-0.5 rounded-md;
+  }
+  .match-card {
+    @apply rounded-xl p-3 border;
+  }
+  .match-card-normal {
+    @apply bg-dark-50 border-dark-200;
+  }
+  .match-card-brasil {
+    @apply bg-gradient-to-r from-green-50 to-emerald-50 border-green-300;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fadeIn 0.3s ease-out; }
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-up { animation: slideUp 0.4s ease-out; }
