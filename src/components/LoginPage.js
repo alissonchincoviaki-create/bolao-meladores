@@ -86,7 +86,7 @@ export default function LoginPage({ onLogin }) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-dark-50 to-primary-50 p-5">
         <div className="bg-white rounded-2xl p-8 max-w-sm w-full shadow-xl border border-primary-200 flex flex-col items-center">
-          <span className="text-5xl mb-2">⚽</span>
+          <span className="text-5xl mb-2">🍯</span>
           <h1 className="font-display text-2xl font-extrabold text-dark-900 mb-1">Primeiro Acesso</h1>
           <p className="text-dark-500 text-sm mb-6 text-center">
             Crie sua nova senha para continuar
@@ -146,7 +146,7 @@ export default function LoginPage({ onLogin }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-dark-50 to-primary-50 p-5">
       <div className="bg-white rounded-2xl p-8 max-w-sm w-full shadow-xl border border-primary-200 flex flex-col items-center">
-        <span className="text-6xl mb-2">⚽</span>
+        <span className="text-6xl mb-2">🍯</span>
         <h1 className="font-display text-2xl font-extrabold text-dark-900 mb-1">
           Bolão dos Meladores
         </h1>

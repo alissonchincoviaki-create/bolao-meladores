@@ -49,9 +49,18 @@ function GroupClassCard({ group, teams }) {
   const [positions, setPositions] = useState({ 1: '', 2: '', 3: '', 4: '' });
   const used = Object.values(positions).filter(Boolean);
 
+  function resetGroup() {
+    setPositions({ 1: '', 2: '', 3: '', 4: '' });
+  }
+
   return (
     <div className="bg-dark-50 rounded-lg p-3 border border-dark-200">
-      <div className="font-display font-bold text-dark-900 mb-2 text-sm">Grupo {group}</div>
+      <div className="flex justify-between items-center mb-2">
+        <div className="font-display font-bold text-dark-900 text-sm">Grupo {group}</div>
+        {used.length > 0 && (
+          <button onClick={resetGroup} className="text-[10px] text-red-500 hover:text-red-700">🔄 Limpar</button>
+        )}
+      </div>
       {[1, 2, 3, 4].map(pos => (
         <FlagSelect
           key={pos}
@@ -191,7 +200,14 @@ export default function PalpitesPage({ user }) {
             <FlagSelect label="🥈 Vice (40 pts)" value={vice} onChange={setVice} />
             <FlagSelect label="🥉 3º Lugar (20 pts)" value={third} onChange={setThird} />
           </div>
-          <button className="btn-primary max-w-xs mt-3">✅ Salvar Palpite Inicial</button>
+          <div className="flex gap-2 mt-3">
+            <button className="btn-primary max-w-xs">✅ Salvar Palpite Inicial</button>
+            {(champ || vice || third) && (
+              <button onClick={() => { setChamp(''); setVice(''); setThird(''); }} className="btn-danger text-xs px-4">
+                🔄 Limpar
+              </button>
+            )}
+          </div>
         </div>
       )}
 

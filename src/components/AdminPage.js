@@ -27,6 +27,7 @@ function ResultsTab() {
   const [matches, setMatches] = useState([]);
   const [scores, setScores] = useState({});
   const [saving, setSaving] = useState(null);
+  const [message, setMessage] = useState('');
 
   useEffect(() => { loadMatches(); }, [phase]);
 
@@ -51,35 +52,31 @@ function ResultsTab() {
     const s = scores[matchId];
     if (s.home === '' || s.away === '') return;
     setSaving(matchId);
+    setMessage('');
 
     const updateData = { result_home: parseInt(s.home), result_away: parseInt(s.away) };
     const isKo = !['group_r1', 'group_r2', 'group_r3'].includes(phase);
     if (isKo && s.ko_winner) updateData.ko_winner = s.ko_winner;
 
-    await supabase.from('matches').update(updateData).eq('id', matchId);
-
-    // Calculate points for all guesses
-    const { data: guesses } = await supabase
-      .from('match_guesses')
-      .select('*')
-      .eq('match_id', matchId);
-
-    const match = matches.find(m => m.id === matchId);
-    if (guesses && match) {
-      for (const g of guesses) {
-        const { calculateMatchPoints, getKnockoutClassPoints } = await import('@/lib/scoring');
-        const { points, isExact } = calculateMatchPoints(
-          g.guess_home, g.guess_away, parseInt(s.home), parseInt(s.away), match.is_brasil
-        );
-        let totalPts = points;
-        if (isKo && g.ko_winner_guess === s.ko_winner) {
-          totalPts += getKnockoutClassPoints(phase);
-        }
-        await supabase.from('match_guesses').update({ points: totalPts, is_exact: isExact }).eq('id', g.id);
-      }
+    const { error } = await supabase.from('matches').update(updateData).eq('id', matchId);
+    
+    if (error) {
+      setMessage('Erro ao salvar: ' + error.message);
+    } else {
+      setMessage('Resultado salvo!');
     }
 
     setSaving(null);
+    loadMatches();
+  }
+
+  async function clearResult(matchId) {
+    if (!confirm('Limpar resultado deste jogo?')) return;
+    setSaving(matchId);
+    await supabase.from('matches').update({ result_home: null, result_away: null, ko_winner: null }).eq('id', matchId);
+    await supabase.from('match_guesses').update({ points: null, is_exact: false }).eq('match_id', matchId);
+    setSaving(null);
+    setMessage('Resultado limpo!');
     loadMatches();
   }
 
@@ -95,6 +92,12 @@ function ResultsTab() {
           </button>
         ))}
       </div>
+
+      {message && (
+        <div className="mb-3 p-2 rounded-lg bg-primary-50 border border-primary-200 text-sm text-primary-800">
+          {message}
+        </div>
+      )}
 
       <div className="flex flex-col gap-2">
         {matches.map(m => {
@@ -145,13 +148,24 @@ function ResultsTab() {
                 </div>
               )}
 
-              <button
-                onClick={() => saveResult(m.id)}
-                disabled={saving === m.id}
-                className="btn-success text-xs self-end"
-              >
-                {saving === m.id ? 'Salvando...' : hasResult ? '✏️ Atualizar' : '💾 Salvar'}
-              </button>
+              <div className="flex gap-2 self-end">
+                {hasResult && (
+                  <button
+                    onClick={() => clearResult(m.id)}
+                    disabled={saving === m.id}
+                    className="btn-danger text-xs"
+                  >
+                    🔄 Limpar
+                  </button>
+                )}
+                <button
+                  onClick={() => saveResult(m.id)}
+                  disabled={saving === m.id}
+                  className="btn-success text-xs"
+                >
+                  {saving === m.id ? 'Salvando...' : hasResult ? '✏️ Atualizar' : '💾 Salvar'}
+                </button>
+              </div>
             </div>
           );
         })}
@@ -162,31 +176,95 @@ function ResultsTab() {
 
 function GroupClassTab() {
   const [results, setResults] = useState({});
+  const [message, setMessage] = useState('');
+
+  function getUsedTeams(grp) {
+    const used = [];
+    for (let pos = 1; pos <= 4; pos++) {
+      const val = results[`${grp}_${pos}`];
+      if (val) used.push(val);
+    }
+    return used;
+  }
+
+  async function saveGroup(grp) {
+    const pos1 = results[`${grp}_1`];
+    const pos2 = results[`${grp}_2`];
+    const pos3 = results[`${grp}_3`];
+    const pos4 = results[`${grp}_4`];
+    if (!pos1 || !pos2 || !pos3 || !pos4) {
+      setMessage(`Preencha todas as 4 posições do Grupo ${grp}`);
+      return;
+    }
+
+    const { error } = await supabase.from('group_class_results').upsert({
+      group_letter: grp,
+      pos_1: pos1, pos_2: pos2, pos_3: pos3, pos_4: pos4,
+    }, { onConflict: 'group_letter' });
+
+    if (error) {
+      setMessage('Erro ao salvar: ' + error.message);
+    } else {
+      setMessage(`Grupo ${grp} salvo com sucesso!`);
+    }
+  }
+
+  async function clearGroup(grp) {
+    if (!confirm(`Limpar classificação do Grupo ${grp}?`)) return;
+    setResults(prev => {
+      const next = { ...prev };
+      delete next[`${grp}_1`];
+      delete next[`${grp}_2`];
+      delete next[`${grp}_3`];
+      delete next[`${grp}_4`];
+      return next;
+    });
+    await supabase.from('group_class_results').delete().eq('group_letter', grp);
+    setMessage(`Grupo ${grp} limpo!`);
+  }
 
   return (
     <div>
       <h3 className="section-title">Inserir Classificação Final dos Grupos</h3>
       <p className="text-xs text-dark-500 mb-4">Preencha após o término da fase de grupos</p>
+
+      {message && (
+        <div className="mb-3 p-2 rounded-lg bg-primary-50 border border-primary-200 text-sm text-primary-800">
+          {message}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {Object.entries(GROUPS).map(([grp, teams]) => (
-          <div key={grp} className="bg-dark-50 border border-dark-200 rounded-lg p-3">
-            <div className="font-display font-bold text-sm mb-2">Grupo {grp}</div>
-            {[1, 2, 3, 4].map(pos => (
-              <div key={pos} className="flex items-center gap-2 mb-1.5">
-                <span className="text-xs font-bold text-dark-500 w-5">{pos}º</span>
-                <select
-                  value={results[`${grp}_${pos}`] || ''}
-                  onChange={e => setResults({ ...results, [`${grp}_${pos}`]: e.target.value })}
-                  className="input-field py-1.5 px-2 text-xs flex-1"
-                >
-                  <option value="">Selecionar...</option>
-                  {teams.map(t => <option key={t} value={t}>{getFlag(t)} {t}</option>)}
-                </select>
+        {Object.entries(GROUPS).map(([grp, teams]) => {
+          const used = getUsedTeams(grp);
+          return (
+            <div key={grp} className="bg-dark-50 border border-dark-200 rounded-lg p-3">
+              <div className="font-display font-bold text-sm mb-2">Grupo {grp}</div>
+              {[1, 2, 3, 4].map(pos => {
+                const currentVal = results[`${grp}_${pos}`] || '';
+                const available = teams.filter(t => !used.includes(t) || t === currentVal);
+                return (
+                  <div key={pos} className="flex items-center gap-2 mb-1.5">
+                    <span className="text-xs font-bold text-dark-500 w-5">{pos}º</span>
+                    {currentVal && <span className="text-sm">{getFlag(currentVal)}</span>}
+                    <select
+                      value={currentVal}
+                      onChange={e => setResults({ ...results, [`${grp}_${pos}`]: e.target.value })}
+                      className="input-field py-1.5 px-2 text-xs flex-1"
+                    >
+                      <option value="">Selecionar...</option>
+                      {available.map(t => <option key={t} value={t}>{getFlag(t)} {t}</option>)}
+                    </select>
+                  </div>
+                );
+              })}
+              <div className="flex gap-2 mt-2">
+                <button onClick={() => saveGroup(grp)} className="btn-success text-xs flex-1">💾 Salvar</button>
+                <button onClick={() => clearGroup(grp)} className="btn-danger text-xs">🔄</button>
               </div>
-            ))}
-            <button className="btn-success text-xs w-full mt-2">Salvar Grupo {grp}</button>
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -196,40 +274,59 @@ function PlayersTab() {
   const [players, setPlayers] = useState([]);
   const [newName, setNewName] = useState('');
   const [newLogin, setNewLogin] = useState('');
+  const [message, setMessage] = useState('');
 
   useEffect(() => { loadPlayers(); }, []);
 
   async function loadPlayers() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('users')
       .select('*')
       .eq('is_admin', false)
       .order('name');
+    if (error) {
+      setMessage('Erro ao carregar: ' + error.message);
+    }
     if (data) setPlayers(data);
   }
 
   async function addPlayer() {
-    if (!newName.trim() || !newLogin.trim()) return;
-    await supabase.from('users').insert({
+    if (!newName.trim() || !newLogin.trim()) {
+      setMessage('Preencha nome e login');
+      return;
+    }
+    setMessage('');
+    const { error } = await supabase.from('users').insert({
       name: newName.trim(),
       login: newLogin.toLowerCase().trim(),
       password_hash: 'meladores2026',
       is_admin: false,
       first_access: true,
     });
+    if (error) {
+      if (error.message.includes('duplicate') || error.message.includes('unique')) {
+        setMessage('Esse login já existe! Escolha outro.');
+      } else {
+        setMessage('Erro ao cadastrar: ' + error.message);
+      }
+      return;
+    }
     setNewName('');
     setNewLogin('');
+    setMessage('Participante cadastrado com sucesso!');
     loadPlayers();
   }
 
   async function resetPassword(id) {
     await supabase.from('users').update({ password_hash: 'meladores2026', first_access: true }).eq('id', id);
+    setMessage('Senha resetada!');
     loadPlayers();
   }
 
   async function removePlayer(id) {
     if (!confirm('Tem certeza que quer remover este participante?')) return;
     await supabase.from('users').delete().eq('id', id);
+    setMessage('Participante removido!');
     loadPlayers();
   }
 
@@ -243,24 +340,24 @@ function PlayersTab() {
             className="input-field flex-1 min-w-[140px]" />
           <input placeholder="Login" value={newLogin} onChange={e => setNewLogin(e.target.value)}
             className="input-field flex-1 min-w-[100px]" />
-          <button onClick={addPlayer} className="bg-primary-600 text-white px-5 py-2.5 rounded-lg font-bold text-sm">
+          <button onClick={addPlayer} className="bg-primary-600 text-white px-5 py-2.5 rounded-lg font-bold text-sm hover:bg-primary-700 transition-all">
             Cadastrar
           </button>
         </div>
-        <div className="mt-3">
-          <label className="block text-xs font-semibold text-dark-700 mb-1">📸 Upload 3 fotos/zoeiras</label>
-          <div className="flex gap-2">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="w-12 h-12 rounded-full border-2 border-dashed border-primary-400 flex items-center justify-center cursor-pointer bg-dark-50 text-primary-400 text-lg hover:bg-primary-50 transition-all">
-                +
-              </div>
-            ))}
-          </div>
-        </div>
+        <p className="text-[10px] text-dark-500 mt-2">Senha padrão: meladores2026 (participante troca no primeiro acesso)</p>
       </div>
+
+      {message && (
+        <div className="mb-3 p-2 rounded-lg bg-primary-50 border border-primary-200 text-sm text-primary-800">
+          {message}
+        </div>
+      )}
 
       {/* Player list */}
       <div className="flex flex-col gap-1.5">
+        {players.length === 0 && (
+          <div className="text-center py-6 text-dark-500 text-sm">Nenhum participante cadastrado ainda</div>
+        )}
         {players.map(p => (
           <div key={p.id} className="flex items-center justify-between p-2.5 bg-dark-50 border border-dark-200 rounded-lg flex-wrap gap-2">
             <div className="flex items-center gap-2">
