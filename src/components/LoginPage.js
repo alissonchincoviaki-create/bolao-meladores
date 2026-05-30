@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { sendWelcomeMessage } from '@/lib/auto-messages';
 
 export default function LoginPage({ onLogin }) {
   const [login, setLogin] = useState('');
@@ -64,6 +65,9 @@ export default function LoginPage({ onLogin }) {
         avatar_choice: 1,
       }).eq('id', userData.id);
 
+      // Send welcome message to chat
+      await sendWelcomeMessage(userData.name).catch(() => {});
+
       onLogin({ ...userData, first_access: false, avatar_url_1: avatarUrl || photoPreview, avatar_choice: 1 });
     } catch (err) {
       // If storage fails, save as base64 fallback
@@ -73,6 +77,10 @@ export default function LoginPage({ onLogin }) {
         avatar_url_1: photoPreview,
         avatar_choice: 1,
       }).eq('id', userData.id);
+
+      // Send welcome message to chat
+      await sendWelcomeMessage(userData.name).catch(() => {});
+
       onLogin({ ...userData, first_access: false, avatar_url_1: photoPreview, avatar_choice: 1 });
     }
     setLoading(false);
