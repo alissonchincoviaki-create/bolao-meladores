@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { sendLoginMessage, sendPreCupMessage } from '@/lib/auto-messages';
 import LoginPage from '@/components/LoginPage';
 import Header from '@/components/Header';
 import PalpitesPage from '@/components/PalpitesPage';
@@ -21,12 +22,20 @@ export default function Home() {
       try { setUser(JSON.parse(saved)); } catch {}
     }
     setLoading(false);
+
+    // Send pre-cup message once a day
+    sendPreCupMessage().catch(() => {});
   }, []);
 
-  const handleLogin = (userData) => {
+  const handleLogin = async (userData) => {
     setUser(userData);
     localStorage.setItem('bolao_user', JSON.stringify(userData));
     setPage('palpites');
+
+    // Send login message to chat
+    if (!userData.is_admin) {
+      sendLoginMessage(userData.name).catch(() => {});
+    }
   };
 
   const handleLogout = () => {
