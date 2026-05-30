@@ -41,7 +41,6 @@ function ResultsTab() {
     if (isKo && s.ko_winner) updateData.ko_winner = s.ko_winner;
     await supabase.from('matches').update(updateData).eq('id', matchId);
 
-    // Auto-calculate points for all guesses
     const match = matches.find(m => m.id === matchId);
     const { data: guessData } = await supabase.from('match_guesses').select('*').eq('match_id', matchId);
     if (guessData) {
@@ -56,10 +55,11 @@ function ResultsTab() {
   }
 
   async function clearResult(matchId) {
-    if (!confirm('Limpar resultado?')) return;
+    if (!confirm('Limpar resultado deste jogo?')) return;
+    setSaving(matchId);
     await supabase.from('matches').update({ result_home: null, result_away: null, ko_winner: null }).eq('id', matchId);
     await supabase.from('match_guesses').update({ points: null, is_exact: false }).eq('match_id', matchId);
-    setMessage('Resultado limpo!'); loadMatches();
+    setSaving(null); setMessage('Resultado limpo!'); loadMatches();
   }
 
   const isKo = !['group_r1','group_r2','group_r3'].includes(phase);
@@ -84,7 +84,7 @@ function ResultsTab() {
               <option value="">Selecionar...</option><option value={m.home_team}>{getFlag(m.home_team)} {m.home_team}</option><option value={m.away_team}>{getFlag(m.away_team)} {m.away_team}</option>
             </select></div>)}
           <div className="flex gap-2 self-end">
-            {hasResult && <button onClick={()=>clearResult(m.id)} className="btn-danger text-xs">🔄 Limpar</button>}
+            {hasResult && <button onClick={()=>clearResult(m.id)} disabled={saving===m.id} className="btn-danger text-xs">🔄 Limpar</button>}
             <button onClick={()=>saveResult(m.id)} disabled={saving===m.id} className="btn-success text-xs">{saving===m.id?'Salvando...':hasResult?'✏️ Atualizar':'💾 Salvar'}</button>
           </div>
         </div>);})}</div>
@@ -94,30 +94,76 @@ function ResultsTab() {
 
 function GroupClassTab() {
   const [results, setResults] = useState({});
+  const [savedGroups, setSavedGroups] = useState({});
   const [message, setMessage] = useState('');
+
+  useEffect(() => { loadSaved(); }, []);
+
+  async function loadSaved() {
+    const { data } = await supabase.from('group_class_results').select('*');
+    if (data) {
+      const r = {}; const sg = {};
+      data.forEach(d => {
+        r[`${d.group_letter}_1`] = d.pos_1; r[`${d.group_letter}_2`] = d.pos_2;
+        r[`${d.group_letter}_3`] = d.pos_3; r[`${d.group_letter}_4`] = d.pos_4;
+        sg[d.group_letter] = true;
+      });
+      setResults(r); setSavedGroups(sg);
+    }
+  }
+
   function getUsed(grp) { const u=[]; for(let p=1;p<=4;p++){const v=results[`${grp}_${p}`];if(v)u.push(v);} return u; }
 
   async function saveGroup(grp) {
     const p1=results[`${grp}_1`],p2=results[`${grp}_2`],p3=results[`${grp}_3`],p4=results[`${grp}_4`];
     if(!p1||!p2||!p3||!p4){setMessage(`Preencha as 4 posições do Grupo ${grp}`);return;}
     await supabase.from('group_class_results').upsert({group_letter:grp,pos_1:p1,pos_2:p2,pos_3:p3,pos_4:p4},{onConflict:'group_letter'});
-    // Auto-calc points
     const{data:guessData}=await supabase.from('group_class_guesses').select('*').eq('group_letter',grp);
     if(guessData){for(const g of guessData){
       const pts=calculateGroupClassPoints({pos1:g.pos_1,pos2:g.pos_2,pos3:g.pos_3,pos4:g.pos_4},{pos1:p1,pos2:p2,pos3:p3,pos4:p4});
       await supabase.from('group_class_guesses').update({points:pts}).eq('id',g.id);
     }}
+    setSavedGroups(prev => ({...prev, [grp]: true}));
     setMessage(`✅ Grupo ${grp} salvo e pontos calculados!`);
+  }
+
+  async function clearGroup(grp) {
+    if (!confirm(`Limpar classificação do Grupo ${grp}? Isso zera os pontos dos palpites deste grupo.`)) return;
+    await supabase.from('group_class_results').delete().eq('group_letter', grp);
+    await supabase.from('group_class_guesses').update({ points: null }).eq('group_letter', grp);
+    setResults(prev => {
+      const next = { ...prev };
+      delete next[`${grp}_1`]; delete next[`${grp}_2`]; delete next[`${grp}_3`]; delete next[`${grp}_4`];
+      return next;
+    });
+    setSavedGroups(prev => { const next = {...prev}; delete next[grp]; return next; });
+    setMessage(`Grupo ${grp} limpo!`);
+  }
+
+  async function clearAllGroups() {
+    if (!confirm('Limpar TODOS os grupos? Isso zera todos os pontos de classificação.')) return;
+    await supabase.from('group_class_results').delete().neq('group_letter', '');
+    await supabase.from('group_class_guesses').update({ points: null }).neq('group_letter', '');
+    setResults({}); setSavedGroups({});
+    setMessage('Todos os grupos limpos!');
   }
 
   return (
     <div>
-      <h3 className="section-title">Classificação Final dos Grupos</h3>
+      <div className="flex justify-between items-center mb-2">
+        <h3 className="section-title mb-0">Classificação Final dos Grupos</h3>
+        {Object.keys(savedGroups).length > 0 && (
+          <button onClick={clearAllGroups} className="btn-danger text-xs">🔄 Limpar Todos</button>
+        )}
+      </div>
+      <p className="text-xs text-dark-500 mb-4">Preencha após o término da fase de grupos</p>
       {message && <div className="mb-3 p-2 rounded-lg bg-primary-50 border border-primary-200 text-sm text-primary-800">{message}</div>}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {Object.entries(GROUPS).map(([grp,teams])=>{const used=getUsed(grp);return(
-          <div key={grp} className="bg-dark-50 border border-dark-200 rounded-lg p-3">
-            <div className="font-display font-bold text-sm mb-2">Grupo {grp}</div>
+        {Object.entries(GROUPS).map(([grp,teams])=>{const used=getUsed(grp); const isSaved = savedGroups[grp]; return(
+          <div key={grp} className={`bg-dark-50 border rounded-lg p-3 ${isSaved ? 'border-green-300 bg-green-50/30' : 'border-dark-200'}`}>
+            <div className="flex justify-between items-center mb-2">
+              <div className="font-display font-bold text-sm">Grupo {grp} {isSaved && <span className="text-green-600 text-xs">✓</span>}</div>
+            </div>
             {[1,2,3,4].map(pos=>{const cv=results[`${grp}_${pos}`]||'';const avail=teams.filter(t=>!used.includes(t)||t===cv);return(
               <div key={pos} className="flex items-center gap-2 mb-1.5">
                 <span className="text-xs font-bold text-dark-500 w-5">{pos}º</span>
@@ -126,7 +172,10 @@ function GroupClassTab() {
                   <option value="">Selecionar...</option>{avail.map(t=><option key={t} value={t}>{getFlag(t)} {t}</option>)}
                 </select>
               </div>);})}
-            <button onClick={()=>saveGroup(grp)} className="btn-success text-xs w-full mt-2">💾 Salvar Grupo {grp}</button>
+            <div className="flex gap-2 mt-2">
+              <button onClick={()=>saveGroup(grp)} className="btn-success text-xs flex-1">💾 Salvar</button>
+              {isSaved && <button onClick={()=>clearGroup(grp)} className="btn-danger text-xs">🔄 Limpar</button>}
+            </div>
           </div>);})}
       </div>
     </div>
@@ -138,23 +187,25 @@ function InitialResultsTab() {
   const [vice, setVice] = useState('');
   const [third, setThird] = useState('');
   const [message, setMessage] = useState('');
+  const [hasSaved, setHasSaved] = useState(false);
 
   useEffect(() => { loadResults(); }, []);
   async function loadResults() {
-    const { data } = await supabase.from('initial_results').select('*').limit(1).single();
-    if (data) { setChamp(data.champion||''); setVice(data.vice||''); setThird(data.third_place||''); }
+    const { data } = await supabase.from('initial_results').select('*').limit(1);
+    if (data && data.length > 0) {
+      setChamp(data[0].champion||''); setVice(data[0].vice||''); setThird(data[0].third_place||'');
+      setHasSaved(true);
+    }
   }
 
   async function save() {
     if (!champ||!vice||!third) { setMessage('Preencha os 3 campos'); return; }
-    // Upsert result
     const { data: existing } = await supabase.from('initial_results').select('id').limit(1);
     if (existing && existing.length > 0) {
       await supabase.from('initial_results').update({ champion: champ, vice: vice, third_place: third }).eq('id', existing[0].id);
     } else {
       await supabase.from('initial_results').insert({ champion: champ, vice: vice, third_place: third });
     }
-    // Calculate points for all predictions
     const { data: preds } = await supabase.from('initial_predictions').select('*');
     if (preds) {
       for (const p of preds) {
@@ -162,14 +213,38 @@ function InitialResultsTab() {
         await supabase.from('initial_predictions').update({ points: pts }).eq('id', p.id);
       }
     }
+    setHasSaved(true);
     setMessage('✅ Resultado final salvo e pontos dos palpites iniciais calculados!');
+  }
+
+  async function clearResults() {
+    if (!confirm('Limpar resultado do campeão/vice/3º? Isso zera os pontos dos palpites iniciais.')) return;
+    await supabase.from('initial_results').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await supabase.from('initial_predictions').update({ points: null }).neq('user_id', '00000000-0000-0000-0000-000000000000');
+    setChamp(''); setVice(''); setThird(''); setHasSaved(false);
+    setMessage('Resultado limpo e pontos dos palpites iniciais zerados!');
   }
 
   return (
     <div>
-      <h3 className="section-title">🏆 Resultado Final da Copa</h3>
+      <div className="flex justify-between items-center mb-2">
+        <h3 className="section-title mb-0">🏆 Resultado Final da Copa</h3>
+        {hasSaved && <button onClick={clearResults} className="btn-danger text-xs">🔄 Limpar Tudo</button>}
+      </div>
       <p className="text-xs text-dark-500 mb-4">Preencha após a final para calcular os pontos do palpite inicial de cada participante</p>
       {message && <div className="mb-3 p-2 rounded-lg bg-primary-50 border border-primary-200 text-sm text-primary-800">{message}</div>}
+
+      {hasSaved && (
+        <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-300">
+          <div className="text-sm font-bold text-green-800 mb-1">✅ Resultado registrado:</div>
+          <div className="flex gap-4 text-sm">
+            <span>🏆 {getFlag(champ)} {champ}</span>
+            <span>🥈 {getFlag(vice)} {vice}</span>
+            <span>🥉 {getFlag(third)} {third}</span>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
         <FlagSelect label="🏆 Campeão" value={champ} onChange={setChamp} />
         <FlagSelect label="🥈 Vice" value={vice} onChange={setVice} />
