@@ -39,7 +39,7 @@ export default function Home() {
     return (
       <div className="min-h-screen bg-gradient-to-b from-dark-50 to-primary-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-5xl mb-4">⚽</div>
+          <div className="text-5xl mb-4">🍯</div>
           <div className="font-display text-xl font-bold text-dark-900">Carregando...</div>
         </div>
       </div>
