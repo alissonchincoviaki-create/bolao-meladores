@@ -27,7 +27,7 @@ export default function RankingPage() {
       setRanking(data);
     } else {
       // Fallback: build ranking from users + guesses
-      const { data: users } = await supabase.from('users').select('id, name').eq('is_admin', false);
+      const { data: users } = await supabase.from('users').select('id, name, avatar_url_1, avatar_choice').eq('is_admin', false);
       if (users) {
         const ranked = [];
         for (const u of users) {
@@ -36,7 +36,7 @@ export default function RankingPage() {
           const matchPts = (mg || []).reduce((s, g) => s + (g.points || 0), 0);
           const groupPts = (gc || []).reduce((s, g) => s + (g.points || 0), 0);
           const exacts = (mg || []).filter(g => g.is_exact).length;
-          ranked.push({ name: u.name, total_points: matchPts + groupPts, exact_count: exacts, match_points: matchPts, group_points: groupPts });
+          ranked.push({ name: u.name, avatar_url_1: u.avatar_url_1, total_points: matchPts + groupPts, exact_count: exacts, match_points: matchPts, group_points: groupPts });
         }
         ranked.sort((a, b) => b.total_points - a.total_points || b.exact_count - a.exact_count);
         setRanking(ranked);
@@ -68,7 +68,7 @@ export default function RankingPage() {
               return (
                 <div key={idx} className="flex flex-col items-center" style={{ marginBottom: isFirst ? 20 : 0 }}>
                   <span className={`${isFirst ? 'text-3xl' : 'text-xl'} mb-1`}>{medal}</span>
-                  <Avatar name={p.name} size={isFirst ? 76 : 58} />
+                  <Avatar name={p.name} size={isFirst ? 76 : 58} url={p.avatar_url_1} />
                   <span className={`font-sans font-bold ${isFirst ? 'text-sm' : 'text-xs'} text-dark-900 mt-1.5`}>{p.name}</span>
                   <span className={`font-display font-extrabold ${isFirst ? 'text-2xl' : 'text-lg'} text-dark-900`}>{p.total_points}</span>
                   <span className="text-[10px] text-dark-500">{p.exact_count} exatos</span>
@@ -85,7 +85,7 @@ export default function RankingPage() {
               <div className={`font-display font-extrabold min-w-[28px] text-center ${
                 i === 0 ? 'text-xl text-primary-600' : i === 1 ? 'text-lg text-dark-400' : i === 2 ? 'text-lg text-amber-700' : 'text-base text-dark-300'
               }`}>{i < 3 ? ['🥇','🥈','🥉'][i] : `${i+1}º`}</div>
-              <Avatar name={p.name} size={42} />
+              <Avatar name={p.name} size={42} url={p.avatar_url_1} />
               <div className="flex-1 min-w-0">
                 <span className="font-sans font-bold text-sm text-dark-900">{p.name}</span>
                 {p.exact_count >= 3 && <span className="text-xs ml-1">🎯</span>}
