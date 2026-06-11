@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getFlag, GROUPS, calculateMatchPoints, isDeadlinePassed } from '@/lib/scoring';
 import Avatar from './Avatar';
@@ -26,24 +26,37 @@ function ptsColor(pts) {
   return 'text-red-600';
 }
 
+// Load all users once and cache
+let usersCache = null;
+async function getUsers() {
+  if (usersCache) return usersCache;
+  const { data } = await supabase.from('users').select('id, name, avatar_url_1').eq('is_admin', false);
+  if (data) {
+    usersCache = {};
+    data.forEach(u => { usersCache[u.id] = u; });
+  }
+  return usersCache || {};
+}
+
 function InitialView({ cache, setCache }) {
   const [loading, setLoading] = useState(!cache.initial);
   const data = cache.initial;
 
-  useEffect(() => {
-    if (data) return;
-    loadData();
-  }, []);
+  useEffect(() => { if (!data) loadData(); }, []);
 
   async function loadData() {
     setLoading(true);
     const locked = isDeadlinePassed('initial');
     if (!locked) { setCache(p => ({...p, initial: { locked: false }})); setLoading(false); return; }
+    
+    const users = await getUsers();
     const [predsRes, resRes] = await Promise.all([
-      supabase.from('initial_predictions').select('*, users(name, avatar_url_1)'),
+      supabase.from('initial_predictions').select('*'),
       supabase.from('initial_results').select('*').limit(1),
     ]);
-    setCache(p => ({...p, initial: { locked: true, predictions: predsRes.data || [], result: resRes.data?.[0] || null }}));
+    
+    const predictions = (predsRes.data || []).map(p => ({ ...p, user: users[p.user_id] || { name: '?', avatar_url_1: null } }));
+    setCache(p => ({...p, initial: { locked: true, predictions, result: resRes.data?.[0] || null }}));
     setLoading(false);
   }
 
@@ -68,9 +81,9 @@ function InitialView({ cache, setCache }) {
         {data.predictions.map(p => (
           <div key={p.id} className={`flex items-center justify-between p-3 rounded-lg border ${p.points !== null && p.points > 0 ? 'bg-green-50 border-green-200' : 'bg-dark-50 border-dark-200'}`}>
             <div className="flex items-center gap-2">
-              <Avatar name={p.users?.name} size={28} url={p.users?.avatar_url_1} />
+              <Avatar name={p.user.name} size={28} url={p.user.avatar_url_1} />
               <div>
-                <span className="font-sans font-bold text-sm text-dark-900">{p.users?.name}</span>
+                <span className="font-sans font-bold text-sm text-dark-900">{p.user.name}</span>
                 <div className="text-xs text-dark-500">
                   🏆 {getFlag(p.champion)} {p.champion} · 🥈 {getFlag(p.vice)} {p.vice} · 🥉 {getFlag(p.third_place)} {p.third_place}
                 </div>
@@ -93,23 +106,27 @@ function GroupClassView({ cache, setCache }) {
   const [loading, setLoading] = useState(!cache.group_class);
   const data = cache.group_class;
 
-  useEffect(() => {
-    if (data) return;
-    loadData();
-  }, []);
+  useEffect(() => { if (!data) loadData(); }, []);
 
   async function loadData() {
     setLoading(true);
     const locked = isDeadlinePassed('group_class');
     if (!locked) { setCache(p => ({...p, group_class: { locked: false }})); setLoading(false); return; }
+    
+    const users = await getUsers();
     const [gRes, rRes] = await Promise.all([
-      supabase.from('group_class_guesses').select('*, users(name, avatar_url_1)').order('group_letter'),
+      supabase.from('group_class_guesses').select('*').order('group_letter'),
       supabase.from('group_class_results').select('*'),
     ]);
+    
     const results = {};
     (rRes.data || []).forEach(d => { results[d.group_letter] = d; });
     const byGroup = {};
-    (gRes.data || []).forEach(g => { if (!byGroup[g.group_letter]) byGroup[g.group_letter] = []; byGroup[g.group_letter].push(g); });
+    (gRes.data || []).forEach(g => {
+      g.user = users[g.user_id] || { name: '?', avatar_url_1: null };
+      if (!byGroup[g.group_letter]) byGroup[g.group_letter] = [];
+      byGroup[g.group_letter].push(g);
+    });
     setCache(p => ({...p, group_class: { locked: true, byGroup, results }}));
     setLoading(false);
   }
@@ -145,8 +162,8 @@ function GroupClassView({ cache, setCache }) {
                   return (
                     <div key={g.id} className={`flex items-center justify-between px-2 py-1.5 rounded mb-0.5 ${correct.length === 4 ? 'bg-green-50' : ''}`}>
                       <div className="flex items-center gap-1.5">
-                        <Avatar name={g.users?.name} size={18} url={g.users?.avatar_url_1} />
-                        <span className="text-[11px] font-semibold text-dark-900">{g.users?.name}</span>
+                        <Avatar name={g.user.name} size={18} url={g.user.avatar_url_1} />
+                        <span className="text-[11px] font-semibold text-dark-900">{g.user.name}</span>
                         {correct.length === 4 && <span className="text-[9px]">🎯</span>}
                       </div>
                       <div className="flex items-center gap-1">
@@ -167,7 +184,7 @@ function GroupClassView({ cache, setCache }) {
           );
         })}
       </div>
-      {Object.keys(data.results).length === 0 && <p className="text-xs text-dark-500 mt-3 italic text-center">Pontuação será calculada quando o admin inserir a classificação final</p>}
+      {Object.keys(data.results).length === 0 && <p className="text-xs text-dark-500 mt-3 italic text-center">Pontuação calculada quando o admin inserir a classificação final</p>}
     </div>
   );
 }
@@ -177,24 +194,25 @@ function MatchHistoryView({ phase, cache, setCache }) {
   const [loading, setLoading] = useState(!cache[cacheKey]);
   const data = cache[cacheKey];
 
-  useEffect(() => {
-    if (data) { setLoading(false); return; }
-    loadData();
-  }, [phase]);
+  useEffect(() => { if (!data) loadData(); }, [phase]);
 
   async function loadData() {
     setLoading(true);
     const locked = isDeadlinePassed(phase);
     if (!locked) { setCache(p => ({...p, [cacheKey]: { locked: false }})); setLoading(false); return; }
 
-    // Single parallel request for matches and all guesses of this phase
+    const users = await getUsers();
     const { data: matchData } = await supabase.from('matches').select('*').eq('phase', phase).order('match_date').order('match_time');
     
     if (matchData && matchData.length > 0) {
       const matchIds = matchData.map(m => m.id);
-      const { data: guessData } = await supabase.from('match_guesses').select('*, users(name, avatar_url_1)').in('match_id', matchIds);
+      const { data: guessData } = await supabase.from('match_guesses').select('*').in('match_id', matchIds);
       const grouped = {};
-      (guessData || []).forEach(g => { if (!grouped[g.match_id]) grouped[g.match_id] = []; grouped[g.match_id].push(g); });
+      (guessData || []).forEach(g => {
+        g.user = users[g.user_id] || { name: '?', avatar_url_1: null };
+        if (!grouped[g.match_id]) grouped[g.match_id] = [];
+        grouped[g.match_id].push(g);
+      });
       setCache(p => ({...p, [cacheKey]: { locked: true, matches: matchData, guesses: grouped }}));
     } else {
       setCache(p => ({...p, [cacheKey]: { locked: true, matches: [], guesses: {} }}));
@@ -244,8 +262,8 @@ function MatchHistoryView({ phase, cache, setCache }) {
                 return (
                   <div key={g.id} className={`flex items-center justify-between px-2 py-1 rounded ${isExact ? 'bg-green-50' : ''}`}>
                     <div className="flex items-center gap-1.5">
-                      <Avatar name={g.users?.name || '?'} size={18} url={g.users?.avatar_url_1} />
-                      <span className="text-[11px] font-semibold text-dark-900">{g.users?.name}</span>
+                      <Avatar name={g.user.name} size={18} url={g.user.avatar_url_1} />
+                      <span className="text-[11px] font-semibold text-dark-900">{g.user.name}</span>
                       {isExact && <span className="text-[9px]">🎯</span>}
                     </div>
                     <div className="flex items-center gap-1.5">
