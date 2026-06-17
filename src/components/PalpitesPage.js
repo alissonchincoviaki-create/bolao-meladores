@@ -4,6 +4,91 @@ import { supabase } from '@/lib/supabase';
 import { getFlag, GROUPS, DEADLINES, getTimeRemaining, isDeadlinePassed } from '@/lib/scoring';
 import ScoreStepper from './ScoreStepper';
 import FlagSelect from './FlagSelect';
+import Avatar from './Avatar';
+
+const SCARY_PHRASES = [
+  "Tô de olho nos seus palpites... 👁️",
+  "Tenta me alcançar... se conseguir 😈",
+  "Eu assombro esse ranking 👻",
+  "Palpita com medo, palpita... 🫣",
+  "O líder nunca dorme 💀",
+  "Sente a pressão? Sou eu 😏",
+  "Seu palpite tá tremendo? 🫠",
+  "Cuidado... tô logo ali em cima 👑",
+  "Cada ponto meu é um pesadelo seu 😱",
+  "Buuu! Acertei mais que você 👻",
+];
+
+function GhostLeader({ leader }) {
+  const [bounce, setBounce] = useState(false);
+  const [phraseIdx, setPhraseIdx] = useState(0);
+  const [fadePhrase, setFadePhrase] = useState(true);
+
+  useEffect(() => {
+    const b = setInterval(() => setBounce(x => !x), 2500);
+    const p = setInterval(() => {
+      setFadePhrase(false);
+      setTimeout(() => { setPhraseIdx(i => (i + 1) % SCARY_PHRASES.length); setFadePhrase(true); }, 400);
+    }, 5000);
+    return () => { clearInterval(b); clearInterval(p); };
+  }, []);
+
+  if (!leader) return null;
+  const initials = leader.name ? leader.name.substring(0, 2).toUpperCase() : '??';
+  const COLORS = ['#2563EB','#16A34A','#DC2626','#9333EA','#EA580C','#0891B2','#DB2777'];
+  const color = COLORS[leader.name ? leader.name.charCodeAt(0) % COLORS.length : 0];
+
+  return (
+    <div style={{
+      position: 'fixed', bottom: 16, right: 12, zIndex: 999,
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      opacity: 0.5, transition: 'transform 0.8s ease-in-out',
+      transform: bounce ? 'translateY(-8px)' : 'translateY(4px)',
+      pointerEvents: 'none',
+    }}>
+      <div style={{ position: 'relative', width: 90, height: 110 }}>
+        <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', fontSize: 18, zIndex: 2 }}>👑</div>
+        <svg viewBox="0 0 100 120" style={{ width: 90, height: 110, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.15))' }}>
+          <defs>
+            <radialGradient id="ghostGlow" cx="50%" cy="30%" r="70%">
+              <stop offset="0%" stopColor="#e0e7ff" /><stop offset="50%" stopColor="#c7d2fe" /><stop offset="100%" stopColor="#a5b4fc" />
+            </radialGradient>
+            {leader.avatar_url_1 && (
+              <pattern id="leaderPhoto" patternUnits="objectBoundingBox" width="1" height="1">
+                <image href={leader.avatar_url_1} x="0" y="0" width="44" height="44" preserveAspectRatio="xMidYMid slice" />
+              </pattern>
+            )}
+          </defs>
+          <path d="M50 5 C20 5 5 25 5 50 L5 95 L15 85 L25 95 L35 85 L50 95 L65 85 L75 95 L85 85 L95 95 L95 50 C95 25 80 5 50 5Z"
+            fill="url(#ghostGlow)" stroke="#818cf8" strokeWidth="1.5" opacity="0.9" />
+          {leader.avatar_url_1 ? (
+            <circle cx="50" cy="42" r="22" fill="url(#leaderPhoto)" opacity="0.9" />
+          ) : (
+            <>
+              <circle cx="50" cy="42" r="22" fill={color} opacity="0.9" />
+              <text x="50" y="48" textAnchor="middle" fill="white" fontSize="18" fontWeight="800" fontFamily="sans-serif">{initials}</text>
+            </>
+          )}
+          <circle cx="25" cy="70" r="3" fill="#4f46e5" opacity="0.4" />
+          <circle cx="75" cy="70" r="3" fill="#4f46e5" opacity="0.4" />
+          <path d="M35 78 Q50 85 65 78" fill="none" stroke="#4f46e5" strokeWidth="1.5" opacity="0.3" />
+        </svg>
+      </div>
+      <div style={{ textAlign: 'center', marginTop: -2, fontFamily: "'DM Sans', sans-serif" }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: '#0F172A' }}>{leader.name} · {leader.total}pts</div>
+      </div>
+      <div style={{
+        marginTop: 4, background: 'rgba(79,70,229,0.1)', border: '1px solid rgba(79,70,229,0.2)',
+        borderRadius: 8, padding: '3px 10px', maxWidth: 160, textAlign: 'center',
+        opacity: fadePhrase ? 1 : 0, transition: 'opacity 0.4s',
+      }}>
+        <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 10, fontStyle: 'italic', color: '#4338ca', fontWeight: 600 }}>
+          {SCARY_PHRASES[phraseIdx]}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 const SECTIONS = [
   { id: 'inicial', label: '🔮 Inicial', phase: 'initial' },
@@ -134,12 +219,27 @@ export default function PalpitesPage({ user }) {
   const [third, setThird] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [leader, setLeader] = useState(null);
 
   const current = SECTIONS.find(s => s.id === section);
   const phaseMap = { r1: 'group_r1', r2: 'group_r2', r3: 'group_r3' };
   const locked = isDeadlinePassed(current?.phase);
 
   useEffect(() => { loadData(); }, [section]);
+  useEffect(() => { loadLeader(); }, []);
+
+  async function loadLeader() {
+    const { data: users } = await supabase.from('users').select('id, name, avatar_url_1').eq('is_admin', false);
+    if (!users) return;
+    let best = null;
+    for (const u of users) {
+      const { data: mg } = await supabase.from('match_guesses').select('points').eq('user_id', u.id).not('points', 'is', null);
+      const { data: gc } = await supabase.from('group_class_guesses').select('points').eq('user_id', u.id).not('points', 'is', null);
+      const total = (mg || []).reduce((s, g) => s + (g.points || 0), 0) + (gc || []).reduce((s, g) => s + (g.points || 0), 0);
+      if (!best || total > best.total) best = { name: u.name, avatar_url_1: u.avatar_url_1, total };
+    }
+    if (best && best.total > 0) setLeader(best);
+  }
 
   async function loadData() {
     setMessage('');
@@ -328,6 +428,9 @@ export default function PalpitesPage({ user }) {
           )}
         </div>
       )}
+
+      {/* 👻 Ghost Leader */}
+      {leader && leader.name !== user.name && <GhostLeader leader={leader} />}
     </div>
   );
 }
