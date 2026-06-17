@@ -1,193 +1,264 @@
 import { supabase } from './supabase';
-import { PROFILES, findProfile } from './zoeira';
 
-// ============ WELCOME MESSAGES (first access) ============
-const WELCOME = {
-  'Chinco': [
-    "🍯 Chinco entrou no bolão! O admin chegou pra controlar tudo... menos os próprios palpites! 🥃",
-    "🍯 Alerta: Chinco ativou o modo controlador! Será que controla os resultados tb? 🤔",
-  ],
-  'Coruja': [
-    "🍯 Coruja pousou no bolão! Largou o treino pra treinar os palpites! 🦉",
-    "🍯 O personal chegou! Coruja, bora ver se tu treina palpite tão bem quanto treina os outros! 💪",
-  ],
-  'Luke': [
-    "🍯 Luke entrou! Sou da vila americana e agora sou do bolão também! 💪",
-    "🍯 O solteirão chegou! Luke, aqui não adianta abraçar o resultado, tem que acertar! 🤗",
-  ],
-  'Gaúcho': [
-    "🍯 Gaúcho entrou no bolão! O bagual largou o pacani e veio palpitar! 🧉",
-    "🍯 O dentista chegou! Gaúcho, bora arrancar uns pontos! 🦷",
-  ],
-  'Tiuk': [
-    "🍯 Tiuk entrou! O advogado vai defender os palpites dele até o fim! ⚖️",
-    "🍯 O presidente saunístico chegou! Tiuk, sauna não vale ponto! 🧖",
-  ],
-  'Testi': [
-    "🍯 Testi entrou! O triatleta chegou pra nadar, pedalar e... errar palpite! 🏊",
-    "🍯 Alerta de dieta! Testi entrou no bolão! Dieta de pontos tb? 🥗",
-  ],
-  'Thi': [
-    "🍯 Thi entrou! O engenheiro da madeira veio calcular uns placares! ☕",
-    "🍯 Thi chegou direto da Panificadora Sabrina! Café na mão e palpite na outra! ☕",
-  ],
-  'Lampi': [
-    "🍯 Lampi entrou! O barbeiro veio cortar as chances dos outros! ✂️",
-    "🍯 O presidente chegou! Lampi, demora 1h pro corte mas o palpite é na hora! ✂️",
-  ],
+// ============ DISCLAIMERS BY PHASE ============
+const DISCLAIMERS = {
+  'group_r1': '⚠️ Texto gerado por inteligência artificial. Qualquer semelhança com a realidade é mera coincidência... ou não. O admin lava as mãos. 🍯',
+  'group_r2': '🤖 Esse texto foi gerado por IA. O admin não escreveu, não revisou e não se responsabiliza. Reclamações? Fala com o robô. 🍯',
+  'group_r3': '📢 Conteúdo gerado automaticamente por IA. O admin jura que não tem nada a ver com isso. A culpa é do algoritmo. 🍯',
+  '32avos': '⚠️ Texto gerado por IA com base nos resultados. Se sentiu ofendido, reclame com o ChatBot. O admin é inocente. 🍯',
+  'oitavas': '🤖 Nenhum melador foi consultado na produção deste texto. A IA escreve, o admin finge que não viu. 🍯',
+  'quartas': '📢 Gerado por inteligência artificial. O admin não concorda, não discorda e principalmente não se responsabiliza. Segue o jogo. 🍯',
+  'semi': '⚠️ Texto 100% artificial, 0% revisado. Se a zoeira passou do ponto, a culpa é da máquina. O admin nem viu o que saiu. 🍯',
+  'final': '🏆 Este texto foi gerado por IA. Se você riu, a IA acertou. Se você chorou, a IA acertou também. O admin só apertou o botão. Até a próxima Copa, Meladores! 🍯',
 };
 
-const WELCOME_GENERIC = [
-  "🍯 {name} entrou no Bolão dos Meladores! Mais um pra passar vergonha! 😂",
-  "🍯 {name} chegou! O bolão tá ficando perigoso! 🔥",
-];
-
-// ============ LOGIN MESSAGES ============
-const LOGIN_MSGS = {
-  'Chinco': [
-    "👀 Chinco tá online! Será que veio mudar o palpite de novo? 🥃",
-    "🔔 O admin tá de olho! Chinco logou!",
-    "⚡ Chinco entrou. Beach tênis não salva palpite ruim, hein!",
-  ],
-  'Coruja': [
-    "👀 Coruja logou! Veio do treino direto pro bolão!",
-    "🔔 Coruja online! Largou o pagode e veio conferir o ranking!",
-    "⚡ O personal tá aqui! Coruja entrou pra treinar os palpites!",
-  ],
-  'Luke': [
-    "👀 Luke logou! Sou da vila americana e vim conferir meus pontos! 💪",
-    "🔔 Luke online! Trouxe abraço e palpite duvidoso!",
-    "⚡ O segurador chegou! Luke entrou pra segurar a posição!",
-  ],
-  'Gaúcho': [
-    "👀 Gaúcho logou! O bagual veio conferir a classificação!",
-    "🔔 Gaúcho online! Engenheiros do Hawaii tocando ao fundo! 🎸",
-    "⚡ O dentista entrou! Gaúcho veio arrancar dente ou pontos?",
-  ],
-  'Tiuk': [
-    "👀 Tiuk logou! O advogado veio analisar os resultados! ⚖️",
-    "🔔 Tiuk online! Saiu da sauna direto pro bolão! 🧖",
-    "⚡ O presidente saunístico entrou! Tiuk tá de olho!",
-  ],
-  'Testi': [
-    "👀 Testi logou! Parou o treino pra ver o ranking!",
-    "🔔 Testi online! Veio da natação direto pro bolão! 🏊",
-    "⚡ O triatleta chegou! Testi vai conferir a dieta de pontos!",
-  ],
-  'Thi': [
-    "👀 Thi logou! Café na mão e ranking na tela! ☕",
-    "🔔 Thi online! Saiu da Sabrina e veio pro bolão!",
-    "⚡ O maratonista chegou! Thi corre dos palpites ruins? 🏃",
-  ],
-  'Lampi': [
-    "👀 Lampi logou! Pausou o corte pra ver o bolão! ✂️",
-    "🔔 Lampi online! O zoeiro veio zoar ou ser zoado?",
-    "⚡ O barbeiro chegou! Lampi veio aparar as arestas do ranking!",
-  ],
+const PHASE_LABELS = {
+  'group_r1': '1ª Rodada',
+  'group_r2': '2ª Rodada',
+  'group_r3': '3ª Rodada',
+  '32avos': '32-avos de Final',
+  'oitavas': 'Oitavas de Final',
+  'quartas': 'Quartas de Final',
+  'semi': 'Semifinais',
+  'final': 'Final',
 };
 
-const LOGIN_GENERIC = [
-  "👀 {name} tá online!",
-  "🔔 {name} logou no bolão!",
-];
+// ============ PROFILES ============
+const PROFILES_TEXT = `PERFIS DOS PARTICIPANTES (use para trocadilhos, NÃO use cargo/profissão pra chamar a pessoa):
+- Chinco (Alisson): admin do bolão, joga beach tênis e tênis, bebe cynar, casado com Samara, pai da Alice, torce pro Flamengo. Usar: cynar, beach tênis, controlador (trocadilho)
+- Coruja (Lucas Vozinak): kicker de futebol americano, ama pagode e reggae, casado com Mônica, torce pro Atlético PR. Usar: kicker, field goal, pagode, reggae
+- Luke (Lucas Ramos): pai da Nala (cachorra), ama correr, gosta de foto e abraçar todo mundo, bordão "sou da vila americana" (usar com moderação), torce pro Grêmio. Usar: abraço, Nala, corrida, foto. NÃO chamar de solteirão.
+- Gaúcho (Felipe Schneider): casado com Mayla, pai do Caetano, pacanicultor, baixista da Quinta do Rock, ex-praticante de vários esportes, fã de Engenheiros do Hawaii, torce pro Internacional. Usar: pacani, baixo, Quinta do Rock, bagual, tchê
+- Tiuk (Tiago Witiuk): casado com Lili, pai da Beatriz, pratica natação e corrida, presidente do grupo saunístico, ama sauna, torce pro Coritiba. Usar: sauna, presidente saunístico
+- Thi (Thiago Freitas): casado com Ana, pai da Laura, maratonista, fotógrafo, viciado em café, sempre na Panificadora Sabrina, o mais tech do grupo, torce pro Coritiba. Usar: café, Sabrina, maratona, foto, engenheiro (trocadilho)
+- Lampi (Thyago Silveira): casado com Jéssica, pai do Pedro, dono da Lampião Barbearia, presidente do Danone, zoeiro, leva 1 hora pra cortar cabelo, torce pro Corinthians. Usar: corte, Lampião, presidente, Danone, tesoura, 1 hora`;
 
-// ============ PRE-CUP MESSAGES ============
-const PRE_CUP = [
-  "🏆 A Copa do Mundo 2026 tá chegando! Quem vai ser o bruxo dos palpites? 🧙",
-  "⚽ Faltam poucos dias! Já garantiram os palpites ou vão deixar pra última hora como sempre? 😅",
-  "🔥 Bolão dos Meladores ativado! Preparem os palpites e os argumentos pra quando errarem tudo! 😂",
-  "🍯 A era dos Meladores começou! Que vença o menos azarado! 🎲",
-  "⚽ Copa 2026 vem aí! Lembrem: aqui não tem especialista, tem palpiteiro com sorte! 🍀",
-  "🏆 Quem será o campeão do bolão? Spoiler: provavelmente não é quem tá mais confiante! 😂",
-  "🔮 Hora de registrar os palpites iniciais! Campeão, vice e 3º lugar. Quem tem coragem de cravar o Brasil? 🇧🇷",
-  "⚡ Lembrete: jogos do Brasil valem DOBRO! Então se errar, a vergonha também é dobrada! 🇧🇷😂",
-  "📊 12 grupos, 48 seleções, 104 jogos. E vocês vão errar a maioria! Bora! 🎯",
-  "🧙 Dica: palpite bom é que nem café do Thi - todo dia um diferente! ☕",
-  "🏮 Alguém vai ser lanterna. A pergunta é: quem? As apostas estão abertas! 💀",
-  "⚽ Já imaginou o Lampi liderando o bolão? Nem ele imagina! ✂️😂",
-  "🥃 Chinco já preparou o cynar pra comemorar ou pra afogar as mágoas? 🤔",
-  "🏃 Thi vai correr uma maratona a cada resultado ruim. Prepara o tênis! 👟",
-  "🦉 Coruja, personal trainer de palpite existe? Perguntando pra um amigo! 💪",
-  "⚖️ Tiuk, se o palpite der ruim, entra com recurso! O advogado do grupo precisa se virar! 😂",
-  "🏊 Testi, triathlon é nadar, pedalar e correr. Bolão é chutar, errar e chorar! 😭",
-  "🧉 Gaúcho, o bagual vai tocar baixo quando perder ou quando ganhar? 🎸",
-  "🤗 Luke, abraço não dá ponto! Mas boa sorte, solteirão da vila americana! 💪",
-];
+const STYLE_GUIDE = `ESTILO DO TEXTO:
+- Zoeiro com trocadilhos pessoais, mas que o participante se sinta abraçado
+- Cada participante deve levar uma zoeira E um reconhecimento/carinho
+- NÃO chamar participantes pelo cargo/profissão (advogado, personal, dentista, etc) — usar essas infos apenas para trocadilhos
+- Usar emojis nos nomes: Chinco 🥃, Coruja 🦉, Luke 💪, Gaúcho 🎸, Tiuk ⚖️, Thi ☕, Lampi ✂️
+- Tom: como um narrador de reality show brasileiro, íntimo dos participantes
+- IMPORTANTE: O bolão vale uma camisa oficial da seleção para o vencedor, os demais pagam em vaquinha. Mencionar isso de forma natural conforme a fase avança (leve no início, mais presente no final)
+- Incluir classificação completa no final com posição, nome, pontos e comentário curto
+- Incluir destaques: quem mais pontuou, quem menos, acertos exatos, jogo do Brasil`;
 
-// ============ FUNCTIONS ============
+// ============ CHECK IF PHASE IS COMPLETE ============
+export async function checkPhaseComplete(phase) {
+  const { data: matches } = await supabase
+    .from('matches')
+    .select('id, result_home')
+    .eq('phase', phase);
 
-function pickRandom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  if (!matches || matches.length === 0) return false;
 
-function getProfileKey(name) {
-  const p = findProfile(name);
-  return p ? p.key : null;
+  const allHaveResults = matches.every(m => m.result_home !== null);
+  return allHaveResults;
 }
 
-// Send a message to the chat
-async function sendSystemMessage(content, type = 'system') {
-  try {
-    await supabase.from('chat_messages').insert({
-      user_id: null,
-      message_type: type,
-      content: content,
-    });
-  } catch (err) {
-    console.error('Error sending system message:', err);
-  }
-}
-
-// Called when user does first access
-export async function sendWelcomeMessage(userName) {
-  const key = getProfileKey(userName);
-  let msg;
-  if (key && WELCOME[key]) {
-    msg = pickRandom(WELCOME[key]);
-  } else {
-    msg = pickRandom(WELCOME_GENERIC).replace('{name}', userName);
-  }
-  await sendSystemMessage(msg, 'zoeira');
-}
-
-// Called on login (not every time - check last login)
-export async function sendLoginMessage(userName) {
-  // Check if we already sent a login message in the last 2 hours
-  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-  const { data: recent } = await supabase
+// ============ CHECK IF SUMMARY ALREADY SENT ============
+async function summaryAlreadySent(phase) {
+  const marker = `RESUMO_${phase.toUpperCase()}`;
+  const { data } = await supabase
     .from('chat_messages')
     .select('id')
-    .eq('message_type', 'zoeira')
-    .ilike('content', `%${userName}%`)
-    .gte('created_at', twoHoursAgo)
+    .eq('message_type', 'summary')
+    .ilike('content', `%${marker}%`)
     .limit(1);
 
-  if (recent && recent.length > 0) return; // Already sent recently
+  return data && data.length > 0;
+}
 
-  const key = getProfileKey(userName);
-  let msg;
-  if (key && LOGIN_MSGS[key]) {
-    msg = pickRandom(LOGIN_MSGS[key]);
-  } else {
-    msg = pickRandom(LOGIN_GENERIC).replace('{name}', userName);
+// ============ GATHER PHASE DATA ============
+async function gatherPhaseData(phase) {
+  // Get all users
+  const { data: users } = await supabase
+    .from('users')
+    .select('id, name')
+    .eq('is_admin', false)
+    .order('name');
+
+  if (!users) return null;
+
+  const userMap = {};
+  users.forEach(u => { userMap[u.id] = u.name; });
+
+  // Get matches of this phase
+  const { data: matches } = await supabase
+    .from('matches')
+    .select('*')
+    .eq('phase', phase)
+    .order('match_date')
+    .order('match_time');
+
+  if (!matches) return null;
+
+  const matchIds = matches.map(m => m.id);
+
+  // Get all guesses for these matches
+  const { data: guesses } = await supabase
+    .from('match_guesses')
+    .select('*')
+    .in('match_id', matchIds);
+
+  // Calculate per-user stats for this phase
+  const userStats = {};
+  users.forEach(u => {
+    userStats[u.name] = { phase_pts: 0, exacts: 0, zeros: 0, total_guesses: 0 };
+  });
+
+  (guesses || []).forEach(g => {
+    const name = userMap[g.user_id];
+    if (!name || !userStats[name]) return;
+    userStats[name].phase_pts += (g.points || 0);
+    userStats[name].total_guesses++;
+    if (g.is_exact) userStats[name].exacts++;
+    if (g.points === 0) userStats[name].zeros++;
+  });
+
+  // Get overall ranking
+  const ranking = [];
+  for (const u of users) {
+    const { data: mg } = await supabase.from('match_guesses').select('points, is_exact').eq('user_id', u.id).not('points', 'is', null);
+    const { data: gc } = await supabase.from('group_class_guesses').select('points').eq('user_id', u.id).not('points', 'is', null);
+    const matchPts = (mg || []).reduce((s, g) => s + (g.points || 0), 0);
+    const groupPts = (gc || []).reduce((s, g) => s + (g.points || 0), 0);
+    const exacts = (mg || []).filter(g => g.is_exact).length;
+    ranking.push({ name: u.name, total: matchPts + groupPts, exacts, phase_pts: userStats[u.name]?.phase_pts || 0 });
   }
-  await sendSystemMessage(msg, 'zoeira');
+  ranking.sort((a, b) => b.total - a.total || b.exacts - a.exacts);
+
+  // Brasil matches
+  const brasilMatches = matches.filter(m => m.is_brasil);
+  const brasilResults = brasilMatches.map(m => ({
+    match: `${m.home_team} ${m.result_home}x${m.result_away} ${m.away_team}`,
+  }));
+
+  // Format match results
+  const matchResults = matches.map(m => `${m.home_team} ${m.result_home}x${m.result_away} ${m.away_team}${m.is_brasil ? ' 🇧🇷' : ''}`);
+
+  return {
+    phase,
+    phaseLabel: PHASE_LABELS[phase],
+    matchResults,
+    brasilResults,
+    ranking,
+    userStats,
+    totalMatches: matches.length,
+  };
 }
 
-// Send random pre-cup messages
-export async function sendPreCupMessage() {
-  // Check if we already sent a pre-cup message today
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const { data: recent } = await supabase
-    .from('chat_messages')
-    .select('id')
-    .eq('message_type', 'system')
-    .gte('created_at', today.toISOString())
-    .limit(3);
+// ============ GENERATE SUMMARY VIA CLAUDE API ============
+export async function generatePhaseSummary(phase) {
+  // Check if already sent
+  const alreadySent = await summaryAlreadySent(phase);
+  if (alreadySent) return null;
 
-  if (recent && recent.length >= 2) return; // Max 2 pre-cup messages per day
+  // Check if phase is complete
+  const complete = await checkPhaseComplete(phase);
+  if (!complete) return null;
 
-  const msg = pickRandom(PRE_CUP);
-  await sendSystemMessage(msg, 'zoeira');
+  // Gather data
+  const data = await gatherPhaseData(phase);
+  if (!data) return null;
+
+  const disclaimer = DISCLAIMERS[phase] || DISCLAIMERS['group_r1'];
+  const isFinal = phase === 'final';
+
+  // Build ranking text
+  const rankingText = data.ranking.map((r, i) =>
+    `${i + 1}º ${r.name} — ${r.total} pts total (${r.phase_pts} pts nesta rodada, ${r.exacts} exatos)`
+  ).join('\n');
+
+  // Build stats
+  const sortedByPhase = [...data.ranking].sort((a, b) => b.phase_pts - a.phase_pts);
+  const best = sortedByPhase[0];
+  const worst = sortedByPhase[sortedByPhase.length - 1];
+
+  let prompt;
+  if (isFinal) {
+    prompt = `Gere o TEXTO FINAL do Bolão dos Meladores — Copa do Mundo 2026.
+
+A Copa acabou! Gere um storytelling completo da trajetória de todos os participantes ao longo de toda a Copa.
+
+${PROFILES_TEXT}
+
+${STYLE_GUIDE}
+
+DADOS FINAIS:
+Ranking final:
+${rankingText}
+
+Resultados da final: ${data.matchResults.join(', ')}
+
+O CAMPEÃO DO BOLÃO é ${data.ranking[0].name} com ${data.ranking[0].total} pontos e vai escolher sua camisa oficial! Os outros 6 vão pagar na vaquinha.
+O LANTERNA é ${data.ranking[data.ranking.length - 1].name} com ${data.ranking[data.ranking.length - 1].total} pontos.
+
+Destaque da rodada: ${best.name} com ${best.phase_pts} pts
+Pior da rodada: ${worst.name} com ${worst.phase_pts} pts
+
+Faça um texto épico de encerramento, contando a história da Copa dos Meladores do início ao fim, zoando cada um, reconhecendo cada um, coroando o campeão e consolando (com zoeira) o lanterna. Mencione a camisa e a vaquinha.
+
+No final do texto, adicione esta frase exata: "${disclaimer}"
+E antes dela, adicione uma tag oculta: <!-- RESUMO_FINAL -->`;
+  } else {
+    prompt = `Gere o resumo da ${data.phaseLabel} do Bolão dos Meladores — Copa do Mundo 2026.
+
+${PROFILES_TEXT}
+
+${STYLE_GUIDE}
+
+DADOS DA RODADA:
+Fase: ${data.phaseLabel} (${data.totalMatches} jogos)
+
+Resultados dos jogos:
+${data.matchResults.join('\n')}
+
+${data.brasilResults.length > 0 ? 'Jogos do Brasil (pontuação dobrada): ' + data.brasilResults.map(b => b.match).join(', ') : 'Sem jogos do Brasil nesta rodada.'}
+
+Classificação após esta rodada:
+${rankingText}
+
+Destaque da rodada: ${best.name} com ${best.phase_pts} pts
+Pior da rodada: ${worst.name} com ${worst.phase_pts} pts
+
+Gere o texto como storytelling: como começou a rodada, o que aconteceu, quem subiu, quem caiu, zoeira personalizada pra cada participante com carinho. Inclua a classificação formatada no final.
+
+No final do texto, adicione esta frase exata: "${disclaimer}"
+E antes dela, adicione uma tag oculta: <!-- RESUMO_${phase.toUpperCase()} -->`;
+  }
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY || '',
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2000,
+        system: `Você é o narrador oficial do Bolão dos Meladores, um bolão da Copa do Mundo 2026 entre 7 amigos. Gere textos de resumo de rodada no estilo storytelling zoeiro mas carinhoso. Responda APENAS com o texto do resumo, sem explicações.`,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    const result = await response.json();
+    const text = result.content?.[0]?.text?.trim();
+
+    if (text) {
+      // Save to chat
+      await supabase.from('chat_messages').insert({
+        user_id: null,
+        message_type: 'summary',
+        content: text,
+      });
+      return text;
+    }
+  } catch (err) {
+    console.error('Error generating summary:', err);
+  }
+
+  return null;
 }
-
-export { PRE_CUP };
