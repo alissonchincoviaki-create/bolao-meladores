@@ -73,11 +73,31 @@ export default function ResenhaPage({ user }) {
 
           {messages.map((msg, i) => {
             const isSystem = msg.message_type === 'system' || msg.message_type === 'zoeira';
+            const isSummary = msg.message_type === 'summary';
             const isOwn = isOwnMessage(msg);
             const name = msg.users?.name || msg.user_name || 'Sistema';
             const time = new Date(msg.created_at).toLocaleString('pt-BR', {
               day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
             });
+
+            if (isSummary) {
+              return (
+                <div key={msg.id || i} className="self-center max-w-[95%] animate-fade-in">
+                  <div style={{
+                    background: 'linear-gradient(135deg, #FFF7ED, #FEF3C7)',
+                    border: '2px solid #F59E0B',
+                    borderRadius: 12, padding: '16px',
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 8, textAlign: 'center' }}>🍯 RESUMO DA RODADA 🍯</div>
+                    <div style={{
+                      fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: '#1C1917',
+                      lineHeight: 1.7, whiteSpace: 'pre-wrap',
+                    }}>{msg.content.replace(/###\s?/g, '').replace(/\*\*/g, '').replace(/<!-- .* -->/g, '').trim()}</div>
+                    <div style={{ fontSize: 9, color: '#A16207', marginTop: 8, textAlign: 'right' }}>{time}</div>
+                  </div>
+                </div>
+              );
+            }
 
             if (isSystem) {
               return (
