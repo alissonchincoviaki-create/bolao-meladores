@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { getFlag, GROUPS, calculateMatchPoints, isDeadlinePassed } from '@/lib/scoring';
+import { getFlag, GROUPS, calculateMatchPoints, isDeadlinePassed, matchHasStarted } from '@/lib/scoring';
 import Avatar from './Avatar';
 
 const PHASES = [
@@ -26,44 +26,34 @@ function ptsColor(pts) {
   return 'text-red-600';
 }
 
-// Load all users once and cache
 let usersCache = null;
 async function getUsers() {
   if (usersCache) return usersCache;
   const { data } = await supabase.from('users').select('id, name, avatar_url_1').eq('is_admin', false);
-  if (data) {
-    usersCache = {};
-    data.forEach(u => { usersCache[u.id] = u; });
-  }
+  if (data) { usersCache = {}; data.forEach(u => { usersCache[u.id] = u; }); }
   return usersCache || {};
 }
 
 function InitialView({ cache, setCache }) {
   const [loading, setLoading] = useState(!cache.initial);
   const data = cache.initial;
-
   useEffect(() => { if (!data) loadData(); }, []);
-
   async function loadData() {
     setLoading(true);
     const locked = isDeadlinePassed('initial');
     if (!locked) { setCache(p => ({...p, initial: { locked: false }})); setLoading(false); return; }
-    
     const users = await getUsers();
     const [predsRes, resRes] = await Promise.all([
       supabase.from('initial_predictions').select('*'),
       supabase.from('initial_results').select('*').limit(1),
     ]);
-    
     const predictions = (predsRes.data || []).map(p => ({ ...p, user: users[p.user_id] || { name: '?', avatar_url_1: null } }));
     setCache(p => ({...p, initial: { locked: true, predictions, result: resRes.data?.[0] || null }}));
     setLoading(false);
   }
-
   if (loading) return <div className="card text-center py-10"><div className="text-3xl mb-2">🍯</div><div className="text-dark-500">Carregando...</div></div>;
   if (!data?.locked) return <div className="card text-center py-10"><div className="text-3xl mb-2">🔒</div><div className="text-dark-500">Palpites visíveis após o prazo de envio</div></div>;
   if (data.predictions.length === 0) return <div className="card text-center py-10"><div className="text-3xl mb-2">📋</div><div className="text-dark-500">Nenhum palpite inicial registrado</div></div>;
-
   return (
     <div className="card animate-fade-in">
       <h3 className="section-title">🔮 Palpites Iniciais</h3>
@@ -79,25 +69,19 @@ function InitialView({ cache, setCache }) {
       )}
       <div className="flex flex-col gap-2">
         {data.predictions.map(p => (
-          <div key={p.id} className={`flex items-center justify-between p-3 rounded-lg border ${p.points !== null && p.points > 0 ? 'bg-green-50 border-green-200' : 'bg-dark-50 border-dark-200'}`}>
+          <div key={p.id} className={`flex items-center justify-between p-3 rounded-lg border ${p.points > 0 ? 'bg-green-50 border-green-200' : 'bg-dark-50 border-dark-200'}`}>
             <div className="flex items-center gap-2">
               <Avatar name={p.user.name} size={28} url={p.user.avatar_url_1} />
               <div>
                 <span className="font-sans font-bold text-sm text-dark-900">{p.user.name}</span>
-                <div className="text-xs text-dark-500">
-                  🏆 {getFlag(p.champion)} {p.champion} · 🥈 {getFlag(p.vice)} {p.vice} · 🥉 {getFlag(p.third_place)} {p.third_place}
-                </div>
+                <div className="text-xs text-dark-500">🏆 {getFlag(p.champion)} {p.champion} · 🥈 {getFlag(p.vice)} {p.vice} · 🥉 {getFlag(p.third_place)} {p.third_place}</div>
               </div>
             </div>
-            {p.points !== null ? (
-              <span className={`font-display font-extrabold text-sm ${p.points > 0 ? 'text-green-600' : 'text-red-500'}`}>+{p.points}</span>
-            ) : (
-              <span className="text-[10px] text-dark-400">Aguardando final</span>
-            )}
+            {p.points !== null ? <span className={`font-display font-extrabold text-sm ${p.points > 0 ? 'text-green-600' : 'text-red-500'}`}>+{p.points}</span> : <span className="text-[10px] text-dark-400">Aguardando final</span>}
           </div>
         ))}
       </div>
-      {!data.result && <p className="text-xs text-dark-500 mt-3 italic">Pontuação será calculada após a final da Copa</p>}
+      {!data.result && <p className="text-xs text-dark-500 mt-3 italic">Pontuação calculada após a final</p>}
     </div>
   );
 }
@@ -105,43 +89,30 @@ function InitialView({ cache, setCache }) {
 function GroupClassView({ cache, setCache }) {
   const [loading, setLoading] = useState(!cache.group_class);
   const data = cache.group_class;
-
   useEffect(() => { if (!data) loadData(); }, []);
-
   async function loadData() {
     setLoading(true);
     const locked = isDeadlinePassed('group_class');
     if (!locked) { setCache(p => ({...p, group_class: { locked: false }})); setLoading(false); return; }
-    
     const users = await getUsers();
     const [gRes, rRes] = await Promise.all([
       supabase.from('group_class_guesses').select('*').order('group_letter'),
       supabase.from('group_class_results').select('*'),
     ]);
-    
-    const results = {};
-    (rRes.data || []).forEach(d => { results[d.group_letter] = d; });
-    const byGroup = {};
-    (gRes.data || []).forEach(g => {
-      g.user = users[g.user_id] || { name: '?', avatar_url_1: null };
-      if (!byGroup[g.group_letter]) byGroup[g.group_letter] = [];
-      byGroup[g.group_letter].push(g);
-    });
+    const results = {}; (rRes.data || []).forEach(d => { results[d.group_letter] = d; });
+    const byGroup = {}; (gRes.data || []).forEach(g => { g.user = users[g.user_id] || { name: '?', avatar_url_1: null }; if (!byGroup[g.group_letter]) byGroup[g.group_letter] = []; byGroup[g.group_letter].push(g); });
     setCache(p => ({...p, group_class: { locked: true, byGroup, results }}));
     setLoading(false);
   }
-
   if (loading) return <div className="card text-center py-10"><div className="text-3xl mb-2">🍯</div><div className="text-dark-500">Carregando...</div></div>;
   if (!data?.locked) return <div className="card text-center py-10"><div className="text-3xl mb-2">🔒</div><div className="text-dark-500">Palpites visíveis após o prazo de envio</div></div>;
   if (Object.keys(data.byGroup).length === 0) return <div className="card text-center py-10"><div className="text-3xl mb-2">📋</div><div className="text-dark-500">Nenhum palpite registrado</div></div>;
-
   return (
     <div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {Object.entries(GROUPS).map(([grp]) => {
-          const groupGuesses = data.byGroup[grp] || [];
-          const result = data.results[grp];
-          if (groupGuesses.length === 0) return null;
+          const gg = data.byGroup[grp] || []; const result = data.results[grp];
+          if (gg.length === 0) return null;
           return (
             <div key={grp} className="card p-0 overflow-hidden animate-fade-in">
               <div className="px-3 py-2 bg-dark-50 border-b border-dark-200">
@@ -149,16 +120,11 @@ function GroupClassView({ cache, setCache }) {
                   <span className="font-display font-bold text-sm">Grupo {grp}</span>
                   {result && <span className="text-green-600 text-[10px] font-bold">✅ Resultado</span>}
                 </div>
-                {result ? (
-                  <div className="text-[10px] text-dark-500 mt-1">
-                    1º {getFlag(result.pos_1)} {result.pos_1} · 2º {getFlag(result.pos_2)} {result.pos_2} · 3º {getFlag(result.pos_3)} {result.pos_3} · 4º {getFlag(result.pos_4)} {result.pos_4}
-                  </div>
-                ) : <div className="text-[10px] text-dark-400 mt-1">Aguardando classificação final</div>}
+                {result ? <div className="text-[10px] text-dark-500 mt-1">1º {getFlag(result.pos_1)} {result.pos_1} · 2º {getFlag(result.pos_2)} {result.pos_2} · 3º {getFlag(result.pos_3)} {result.pos_3} · 4º {getFlag(result.pos_4)} {result.pos_4}</div> : <div className="text-[10px] text-dark-400 mt-1">Aguardando classificação</div>}
               </div>
               <div className="p-2">
-                {groupGuesses.map(g => {
-                  const correct = [];
-                  if (result) { [1,2,3,4].forEach(pos => { if (g[`pos_${pos}`] === result[`pos_${pos}`]) correct.push(pos); }); }
+                {gg.map(g => {
+                  const correct = []; if (result) { [1,2,3,4].forEach(pos => { if (g[`pos_${pos}`] === result[`pos_${pos}`]) correct.push(pos); }); }
                   return (
                     <div key={g.id} className={`flex items-center justify-between px-2 py-1.5 rounded mb-0.5 ${correct.length === 4 ? 'bg-green-50' : ''}`}>
                       <div className="flex items-center gap-1.5">
@@ -167,14 +133,8 @@ function GroupClassView({ cache, setCache }) {
                         {correct.length === 4 && <span className="text-[9px]">🎯</span>}
                       </div>
                       <div className="flex items-center gap-1">
-                        {[1,2,3,4].map(pos => {
-                          const team = g[`pos_${pos}`];
-                          const isCorrect = result && g[`pos_${pos}`] === result[`pos_${pos}`];
-                          return <span key={pos} className={`text-[10px] px-1 rounded ${isCorrect ? 'bg-green-100 text-green-700' : result ? 'text-dark-400' : 'text-dark-600'}`}>{pos}º{getFlag(team)}</span>;
-                        })}
-                        {g.points !== null ? (
-                          <span className={`font-display font-extrabold text-xs ml-1 ${g.points > 0 ? 'text-green-600' : 'text-red-500'}`}>+{g.points}</span>
-                        ) : result ? <span className="text-[10px] text-dark-400 ml-1">—</span> : null}
+                        {[1,2,3,4].map(pos => { const team = g[`pos_${pos}`]; const ok = result && g[`pos_${pos}`] === result[`pos_${pos}`]; return <span key={pos} className={`text-[10px] px-1 rounded ${ok ? 'bg-green-100 text-green-700' : result ? 'text-dark-400' : 'text-dark-600'}`}>{pos}º{getFlag(team)}</span>; })}
+                        {g.points !== null ? <span className={`font-display font-extrabold text-xs ml-1 ${g.points > 0 ? 'text-green-600' : 'text-red-500'}`}>+{g.points}</span> : result ? <span className="text-[10px] text-dark-400 ml-1">—</span> : null}
                       </div>
                     </div>
                   );
@@ -184,26 +144,21 @@ function GroupClassView({ cache, setCache }) {
           );
         })}
       </div>
-      {Object.keys(data.results).length === 0 && <p className="text-xs text-dark-500 mt-3 italic text-center">Pontuação calculada quando o admin inserir a classificação final</p>}
+      {Object.keys(data.results).length === 0 && <p className="text-xs text-dark-500 mt-3 italic text-center">Pontuação calculada quando o admin inserir a classificação</p>}
     </div>
   );
 }
 
-function MatchHistoryView({ phase, cache, setCache }) {
+function MatchHistoryView({ phase, cache, setCache, userId }) {
   const cacheKey = `match_${phase}`;
   const [loading, setLoading] = useState(!cache[cacheKey]);
   const data = cache[cacheKey];
-
   useEffect(() => { if (!data) loadData(); }, [phase]);
 
   async function loadData() {
     setLoading(true);
-    const locked = isDeadlinePassed(phase);
-    if (!locked) { setCache(p => ({...p, [cacheKey]: { locked: false }})); setLoading(false); return; }
-
     const users = await getUsers();
     const { data: matchData } = await supabase.from('matches').select('*').eq('phase', phase).order('match_date').order('match_time');
-    
     if (matchData && matchData.length > 0) {
       const matchIds = matchData.map(m => m.id);
       const { data: guessData } = await supabase.from('match_guesses').select('*').in('match_id', matchIds);
@@ -213,30 +168,35 @@ function MatchHistoryView({ phase, cache, setCache }) {
         if (!grouped[g.match_id]) grouped[g.match_id] = [];
         grouped[g.match_id].push(g);
       });
-      setCache(p => ({...p, [cacheKey]: { locked: true, matches: matchData, guesses: grouped }}));
+      setCache(p => ({...p, [cacheKey]: { matches: matchData, guesses: grouped }}));
     } else {
-      setCache(p => ({...p, [cacheKey]: { locked: true, matches: [], guesses: {} }}));
+      setCache(p => ({...p, [cacheKey]: { matches: [], guesses: {} }}));
     }
     setLoading(false);
   }
 
   if (loading) return <div className="card text-center py-10"><div className="text-3xl mb-2">🍯</div><div className="text-dark-500">Carregando...</div></div>;
-  if (!data?.locked) return <div className="card text-center py-10"><div className="text-3xl mb-2">🔒</div><div className="text-dark-500">Palpites visíveis após o prazo de envio</div></div>;
-  if (data.matches.length === 0) return <div className="card text-center py-10"><div className="text-3xl mb-2">📋</div><div className="text-dark-500">Nenhum jogo nesta fase</div></div>;
+  if (!data || data.matches.length === 0) return <div className="card text-center py-10"><div className="text-3xl mb-2">📋</div><div className="text-dark-500">Nenhum jogo nesta fase</div></div>;
 
   const isKo = ['32avos','oitavas','quartas','semi','terceiro','final'].includes(phase);
 
   return (
     <div>
       {data.matches.map(m => {
-        const matchGuesses = data.guesses[m.id] || [];
+        const started = matchHasStarted(m.match_date, m.match_time);
         const hasResult = m.result_home !== null;
+        const matchGuesses = data.guesses[m.id] || [];
+
+        // Filter guesses: show all if started, only own if not started
+        const visibleGuesses = started ? matchGuesses : matchGuesses.filter(g => g.user_id === userId);
+
         return (
           <div key={m.id} className={`card p-0 mb-2 overflow-hidden animate-fade-in ${m.is_brasil ? 'border-l-[3px] border-l-brasil' : ''}`}>
             <div className="flex items-center justify-between px-3 py-1.5 bg-dark-50 gap-2 flex-wrap">
               <span className="text-[10px] text-dark-500">
                 {m.group_letter ? `Grupo ${m.group_letter} · ` : ''}{m.match_time}
                 {m.is_brasil && <span className="badge-brasil ml-1.5">🇧🇷 2x</span>}
+                {!started && <span className="ml-1 text-primary-500 font-bold text-[9px]">⏳ Não iniciou</span>}
               </span>
               <div className="flex items-center gap-1.5">
                 <span className="text-sm">{getFlag(m.home_team)}</span>
@@ -251,9 +211,8 @@ function MatchHistoryView({ phase, cache, setCache }) {
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 px-2 py-1">
-              {matchGuesses.map(g => {
-                let displayPts = null;
-                let isExact = false;
+              {visibleGuesses.map(g => {
+                let displayPts = null; let isExact = false;
                 if (hasResult) {
                   const calc = calculateMatchPoints(g.guess_home, g.guess_away, m.result_home, m.result_away, m.is_brasil);
                   displayPts = g.points !== null ? g.points : calc.points;
@@ -280,7 +239,9 @@ function MatchHistoryView({ phase, cache, setCache }) {
                   </div>
                 );
               })}
-              {matchGuesses.length === 0 && <div className="text-xs text-dark-400 p-2">Nenhum palpite registrado</div>}
+              {visibleGuesses.length === 0 && started && <div className="text-xs text-dark-400 p-2">Nenhum palpite registrado</div>}
+              {!started && visibleGuesses.length === 0 && <div className="text-xs text-primary-400 p-2">🔒 Palpites visíveis após o início do jogo</div>}
+              {!started && visibleGuesses.length > 0 && <div className="text-xs text-primary-400 p-2 col-span-2">🔒 Apenas seu palpite visível — demais após o início</div>}
             </div>
           </div>
         );
@@ -292,7 +253,6 @@ function MatchHistoryView({ phase, cache, setCache }) {
 export default function HistoricoPage({ user }) {
   const [phase, setPhase] = useState('group_r1');
   const [cache, setCache] = useState({});
-
   return (
     <div className="max-w-[900px] mx-auto p-5">
       <div className="flex gap-1 flex-wrap mb-3">
@@ -303,7 +263,7 @@ export default function HistoricoPage({ user }) {
       </div>
       {phase === 'initial' && <InitialView cache={cache} setCache={setCache} />}
       {phase === 'group_class' && <GroupClassView cache={cache} setCache={setCache} />}
-      {!['initial', 'group_class'].includes(phase) && <MatchHistoryView phase={phase} cache={cache} setCache={setCache} />}
+      {!['initial', 'group_class'].includes(phase) && <MatchHistoryView phase={phase} cache={cache} setCache={setCache} userId={user.id} />}
     </div>
   );
 }
