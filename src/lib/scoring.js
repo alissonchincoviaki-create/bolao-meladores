@@ -138,3 +138,17 @@ export const GROUPS = {
   K: ['Portugal', 'RD Congo', 'Uzbequistão', 'Colômbia'],
   L: ['Inglaterra', 'Croácia', 'Gana', 'Panamá'],
 };
+
+// ---- MATCH START TIME CHECK ----
+export function matchHasStarted(matchDate, matchTime) {
+  const timeClean = matchTime.replace('h', ':').replace(/:\s*$/, ':00');
+  const [hours, minutes] = timeClean.split(':').map(Number);
+  const matchDateTime = new Date(`${matchDate}T${String(hours).padStart(2,'0')}:${String(minutes || 0).padStart(2,'0')}:00-03:00`);
+  return new Date() >= matchDateTime;
+}
+
+export function getMatchDateTime(matchDate, matchTime) {
+  const timeClean = matchTime.replace('h', ':').replace(/:\s*$/, ':00');
+  const [hours, minutes] = timeClean.split(':').map(Number);
+  return new Date(`${matchDate}T${String(hours).padStart(2,'0')}:${String(minutes || 0).padStart(2,'0')}:00-03:00`);
+}
